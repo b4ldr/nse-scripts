@@ -8,6 +8,7 @@ information gathered:
  * hostname/ipaddress:port of the master namenode server 
  * Last time a checkpoint was taken
  * How often checkpoints are taken (in seconds)
+ * Log Directory (reletive to the http://host:port/)
  * File size of current checkpoint
  
 For more information about Hadoop, see:
@@ -26,6 +27,7 @@ For more information about Hadoop, see:
 -- |   Start: Wed May 11 22:33:44 PDT 2011
 -- |   Version: 0.20.2, f415ef415ef415ef415ef415ef415ef415ef415e
 -- |   Compiled: Wed May 11 22:33:44 PDT 2011 by bob from unknown
+-- |   Log: /logs/
 -- |   namenode: namenode1.example.com/192.0.1.1:8020
 -- |   Last Checkpoint: Wed May 11 22:33:44 PDT 2011
 -- |   Checkpoint Period: 3600 seconds
@@ -76,6 +78,11 @@ action = function( host, port )
 			stdnse.print_debug(1, ("%s: Compiled %s"):format(SCRIPT_NAME,compiled))  
 			table.insert(result, ("Compiled: %s"):format(compiled))
 		end
+                if body:match("([^][\"]+)\">Logs") then
+                        local logs = body:match("([^][\"]+)\">Logs")
+                        stdnse.print_debug(1, ("%s: Logs %s"):format(SCRIPT_NAME,logs))  
+                        table.insert(result, ("Logs: %s"):format(logs))
+                end
 		table.insert(result, ("Namenode: %s"):format(stats[1]))
 		table.insert(result, ("Last Checkpoint: %s"):format(stats[3]))
 		table.insert(result, ("Checkpoint Period: %s"):format(stats[4]))
