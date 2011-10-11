@@ -5,10 +5,10 @@ information gathered:
  * Date/Time the service was started
  * Hadoop Version
  * Hadoop Complie date
- * Upgrades status
- * Filesystem Directory (reletive to the http://host:port/)
- * Log Directory (reletive to the http://host:port/)
- * Associated Datanodes
+ * hostname/ipaddress:port of the master namenode server 
+ * Last time a checkpoint was taken
+ * How often checkpoints are taken (in seconds)
+ * File size of current checkpoint
  
 For more information about Hadoop, see:
  * http://hadoop.apache.org/
@@ -20,23 +20,17 @@ For more information about Hadoop, see:
 -- nmap --script  hadoop-secondary-namenode-info -p 50090 host
 --
 -- @output
--- PORT      STATE SERVICE         REASON
--- 50070/tcp open   hadoop-secondary-namenode syn-ack
--- | hadoop-namenode-info: 
--- |   Started:  Wed May 11 22:33:44 PDT 2011
--- |   Version:  0.20.2-cdh3u1, f415ef415ef415ef415ef415ef415ef415ef415e
--- |   Compiled:  Wed May 11 22:33:44 PDT 2011 by bob from unknown
--- |   Upgrades:  There are no upgrades in progress.
--- |   Filesystem: /nn_browsedfscontent.jsp
--- |   Logs: /logs/
--- |   Storage:
--- |   Total       Used (DFS)      Used (Non DFS)  Remaining
--- |   100 TB      85 TB           500 GB          14.5 TB
--- |   Datanodes (Live): 
--- |     Datanode: datanode1.example.com:50075
--- |     Datanode: datanode2.example.com:50075
----
-
+-- PORT      STATE  SERVICE REASON
+-- 50090/tcp open   unknown syn-ack
+-- | hadoop-secondary-namenode-info: 
+-- |   Start: Wed May 11 22:33:44 PDT 2011
+-- |   Version: 0.20.2, f415ef415ef415ef415ef415ef415ef415ef415e
+-- |   Compiled: Wed May 11 22:33:44 PDT 2011 by bob from unknown
+-- |   namenode: namenode1.example.com/192.0.1.1:8020
+-- |   Last Checkpoint: Wed May 11 22:33:44 PDT 2011
+-- |   Checkpoint Period: 3600 seconds
+-- |_  Checkpoint Size: 12345678 MB
+--
 
 author = "john.r.bond@gmail.com"
 license = "Simplified (2-clause) BSD license--See http://nmap.org/svn/docs/licenses/BSD-simplified"
@@ -62,6 +56,15 @@ action = function( host, port )
 		port.version.name = "hadoop-secondary-namenode"
                 port.version.product = "Apache Hadoop"
 		-- Page isn't valid html :(
+                for i in string.gmatch(body,"\n[%w%s]+:%s+[^][\n]+") do
+			table.insert(stats,i:match(":%s+([^][\n]+)"))
+		end
+		stdnse.print_debug(1, ("%s: namenode %s"):format(SCRIPT_NAME,stats[1]))
+		stdnse.print_debug(1, ("%s: Start %s"):format(SCRIPT_NAME,stats[2]))
+		stdnse.print_debug(1, ("%s: Last Checkpoint %s"):format(SCRIPT_NAME,stats[3]))
+		stdnse.print_debug(1, ("%s: Checkpoint Period %s"):format(SCRIPT_NAME,stats[4]))
+		stdnse.print_debug(1, ("%s: Checkpoint Size %s"):format(SCRIPT_NAME,stats[5]))
+		table.insert(result, ("Start: %s"):format(stats[2]))
 		if body:match("Version:%s*</td><td>([^][\n]+)") then
 			local version = body:match("Version:%s*</td><td>([^][\n]+)")
 			stdnse.print_debug(1, ("%s: Version %s"):format(SCRIPT_NAME,version))  
@@ -73,19 +76,10 @@ action = function( host, port )
 			stdnse.print_debug(1, ("%s: Compiled %s"):format(SCRIPT_NAME,compiled))  
 			table.insert(result, ("Compiled: %s"):format(compiled))
 		end
-                for i in string.gmatch(body,"\n[%w%s]+:%s+[^][\n]+") do
-			table.insert(stats,i:match(":%s+([^][\n]+)"))
-		end
-		stdnse.print_debug(1, ("%s: namenode %s"):format(SCRIPT_NAME,stats[1]))
-		stdnse.print_debug(1, ("%s: Start %s"):format(SCRIPT_NAME,stats[2]))
-		stdnse.print_debug(1, ("%s: Last Checkpoint %s"):format(SCRIPT_NAME,stats[3]))
-		stdnse.print_debug(1, ("%s: Checkpoint Period %s"):format(SCRIPT_NAME,stats[4]))
-		stdnse.print_debug(1, ("%s: Checkpoint Size %s"):format(SCRIPT_NAME,stats[5]))
-		table.insert(result, ("namenode %s"):format(stats[1]))
-		table.insert(result, ("Start %s"):format(stats[2]))
-		table.insert(result, ("Last Checkpoint %s"):format(stats[3]))
-		table.insert(result, ("Checkpoint Period %s"):format(stats[4]))
-		table.insert(result, ("Checkpoint Size %s"):format(stats[5]))
+		table.insert(result, ("Namenode: %s"):format(stats[1]))
+		table.insert(result, ("Last Checkpoint: %s"):format(stats[3]))
+		table.insert(result, ("Checkpoint Period: %s"):format(stats[4]))
+		table.insert(result, ("Checkpoint: Size %s"):format(stats[5]))
 		if target.ALLOW_NEW_TARGETS then
 			if stats[1]:match("([^][/]+)") then
 				local newtarget = stats[1]:match("([^][/]+)")
