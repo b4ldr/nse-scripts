@@ -17,7 +17,7 @@ For more information about Hadoop, see:
 
 ---
 -- @usage
--- nmap --script hadoop-namenode-info -p 50070 host
+-- nmap -sV --script hadoop-namenode-info -p 50070 host
 --
 -- @output
 -- PORT      STATE SERVICE         REASON
@@ -46,15 +46,16 @@ require ("shortport")
 require ("target")
 require ("http")
 
-portrule = shortport.port_or_service ({50070}, "hadoop-namenode", {"tcp"})
+-- portrule = shortport.http
+portrule = shortport.http
 
 get_datanodes = function( host, port, Status )
 	local result = {}
 	local uri = "/dfsnodelist.jsp?whatNodes=" .. Status
 	stdnse.print_debug(1, ("%s:HTTP GET %s:%s%s"):format(SCRIPT_NAME, host.targetname or host.ip, port.number, uri))
 	local response = http.get( host.targetname or host.ip, port.number, uri )
-	stdnse.print_debug(1, ("%s: Status %s"):format(SCRIPT_NAME,response['status-line']))  
-	if response['status-line']:match("200%s+OK") and response['body']  then
+	stdnse.print_debug(1, ("%s: Status %s"):format(SCRIPT_NAME,response['status-line'] or "No Response" ))  
+	if response['status-line'] and response['status-line']:match("200%s+OK") and response['body']  then
 		local body = response['body']:gsub("%%","%%%%")
 		stdnse.print_debug(2, ("%s: Body %s\n"):format(SCRIPT_NAME,body))  
 		for datanodetmp in string.gmatch(body, "[%w%.:-_]+/browseDirectory.jsp") do
@@ -79,8 +80,8 @@ action = function( host, port )
 	local uri = "/dfshealth.jsp"
 	stdnse.print_debug(1, ("%s:HTTP GET %s:%s%s"):format(SCRIPT_NAME, host.targetname or host.ip, port.number, uri))
 	local response = http.get( host.targetname or host.ip, port.number, uri )
-	stdnse.print_debug(1, ("%s: Status %s"):format(SCRIPT_NAME,response['status-line']))  
-	if response['status-line']:match("200%s+OK") and response['body']  then
+	stdnse.print_debug(1, ("%s: Status %s"):format(SCRIPT_NAME,response['status-line'] or "No Response"))  
+	if response['status-line'] and response['status-line']:match("200%s+OK") and response['body']  then
 		local body = response['body']:gsub("%%","%%%%")
 		local capacity = {}
 		stdnse.print_debug(2, ("%s: Body %s\n"):format(SCRIPT_NAME,body))  
@@ -127,12 +128,12 @@ action = function( host, port )
 		table.insert(result,"Total\tUsed (DFS)\tUsed (Non DFS)\tRemaining")
 		table.insert(result, ("%s\t%s\t%s\t%s"):format(capacity[3],capacity[4],capacity[5],capacity[6]))
 		nmap.set_port_version(host, port, "hardmatched")
+                local datanodes_live = get_datanodes(host,port, "LIVE")
+		table.insert(result, "Datanodes (Live): ")
+		table.insert(result, datanodes_live)
+		local datanodes_dead = get_datanodes(host,port, "DEAD")
+		table.insert(result, "Datanodes (Dead): ")
+		table.insert(result, datanodes_dead)
+		return stdnse.format_output(true, result)
 	end
-	local datanodes_live = get_datanodes(host,port, "LIVE")
-	table.insert(result, "Datanodes (Live): ")
-	table.insert(result, datanodes_live)
-	local datanodes_dead = get_datanodes(host,port, "DEAD")
-	table.insert(result, "Datanodes (Dead): ")
-	table.insert(result, datanodes_dead)
-	return stdnse.format_output(true, result)
 end
