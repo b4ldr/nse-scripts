@@ -18,7 +18,7 @@ For more information about Hadoop, see:
 
 ---
 -- @usage
--- nmap --script hadoop-jobtracker-info [--script-args=hadoop-jobtracker-info.userinfo] -p 50030 host
+-- nmap -sV --script hadoop-jobtracker-info [--script-args=hadoop-jobtracker-info.userinfo] -p 50030 host
 -- 
 -- @output
 -- 50030/tcp open  hadoop-jobtracker
@@ -46,15 +46,15 @@ require ("shortport")
 require ("target")
 require ("http")
 
-portrule = shortport.port_or_service ({50030}, "hadoop-jobtracker", {"tcp"})
+portrule = shortport.http
 
 get_userhistory = function( host, port )
         local results = {}
 	local uri = "/jobhistory.jsp?pageno=-1&search="
 	stdnse.print_debug(1, ("%s:HTTP GET %s:%s%s"):format(SCRIPT_NAME, host.targetname or host.ip, port.number, uri))
 	local response = http.get( host.targetname or host.ip, port.number, uri )
-	stdnse.print_debug(1, ("%s: Status %s"):format(SCRIPT_NAME,response['status-line']))  
-	if response['status-line']:match("200%s+OK") and response['body']  then
+	stdnse.print_debug(1, ("%s: Status %s"):format(SCRIPT_NAME,response['status-line'] or "No Response"))  
+	if response['status-line'] and response['status-line']:match("200%s+OK") and response['body']  then
 		local body = response['body']:gsub("%%","%%%%")
 		stdnse.print_debug(2, ("%s: Body %s\n"):format(SCRIPT_NAME,body)) 
 		for line in string.gmatch(body, "[^\n]+") do
@@ -74,8 +74,8 @@ get_tasktrackers = function( host, port )
 	local uri = "/machines.jsp?type=active"
 	stdnse.print_debug(1, ("%s:HTTP GET %s:%s%s"):format(SCRIPT_NAME, host.targetname or host.ip, port.number, uri))
 	local response = http.get( host.targetname or host.ip, port.number, uri )
-	stdnse.print_debug(1, ("%s: Status %s"):format(SCRIPT_NAME,response['status-line']))  
-	if response['status-line']:match("200%s+OK") and response['body']  then
+	stdnse.print_debug(1, ("%s: Status %s"):format(SCRIPT_NAME,response['status-line'] or "No Response"))  
+	if response['status-line'] and response['status-line']:match("200%s+OK") and response['body']  then
 		stdnse.print_debug(2, ("%s: Body %s\n"):format(SCRIPT_NAME,response['body']))  
 		for line in string.gmatch(response['body'], "[^\n]+") do
 			stdnse.print_debug(3, ("%s: Line %s\n"):format(SCRIPT_NAME,line))  
@@ -101,8 +101,8 @@ action = function( host, port )
 	local uri = "/jobtracker.jsp"
 	stdnse.print_debug(1, ("%s:HTTP GET %s:%s%s"):format(SCRIPT_NAME, host.targetname or host.ip, port.number, uri))
 	local response = http.get( host.targetname or host.ip, port.number, uri )
-	stdnse.print_debug(1, ("%s: Status %s"):format(SCRIPT_NAME,response['status-line']))  
-	if response['status-line']:match("200%s+OK") and response['body']  then
+	stdnse.print_debug(1, ("%s: Status %s"):format(SCRIPT_NAME,response['status-line'] or "No Response"))  
+	if response['status-line'] and response['status-line']:match("200%s+OK") and response['body']  then
 		stdnse.print_debug(2, ("%s: Body %s\n"):format(SCRIPT_NAME,response['body']))  
 		port.version.name = "hadoop-jobtracker"
                 port.version.product = "Apache Hadoop"
@@ -140,14 +140,14 @@ action = function( host, port )
 			table.insert(result, ("Log Files: %s"):format(logfiles))
 		end
 		nmap.set_port_version(host, port, "hardmatched")
+        	local tasktrackers = get_tasktrackers (host, port)
+		table.insert(result, "Tasktrackers: ")
+		table.insert(result, tasktrackers)
+		if stdnse.get_script_args('hadoop-jobtracker-info.userinfo') then
+        		local userhistory = get_userhistory (host, port)
+			table.insert(result, "Userhistory: ")
+			table.insert(result, userhistory)
+        	end
+		return stdnse.format_output(true, result)
 	end
-        local tasktrackers = get_tasktrackers (host, port)
-	table.insert(result, "Tasktrackers: ")
-	table.insert(result, tasktrackers)
-	if stdnse.get_script_args('hadoop-jobtracker-info.userinfo') then
-        	local userhistory = get_userhistory (host, port)
-		table.insert(result, "Userhistory: ")
-		table.insert(result, userhistory)
-        end
-	return stdnse.format_output(true, result)
 end
