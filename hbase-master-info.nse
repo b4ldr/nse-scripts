@@ -18,7 +18,7 @@ For more information about Hbase, see:
 
 ---
 -- @usage
--- nmap --script hbase-master-info -p 60010 host
+-- nmap -sV --script hbase-master-info -p 60010 host
 --
 -- @output
 -- | hbase-master-info: 
@@ -43,7 +43,7 @@ require ("shortport")
 require ("http")
 require ("target")
 
-portrule = shortport.port_or_service ({60010}, "hbase-master", {"tcp"})
+portrule = shortport.http
 
 action = function( host, port )
 
@@ -52,8 +52,8 @@ action = function( host, port )
 	local uri = "/master.jsp"
 	stdnse.print_debug(1, ("%s:HTTP GET %s:%s%s"):format(SCRIPT_NAME, host.targetname or host.ip, port.number, uri))
 	local response = http.get( host.targetname or host.ip, port.number, uri )
-	stdnse.print_debug(1, ("%s: Status %s"):format(SCRIPT_NAME,response['status-line']))  
-	if response['status-line']:match("200%s+OK") and response['body']  then
+	stdnse.print_debug(1, ("%s: Status %s"):format(SCRIPT_NAME,response['status-line'] or "No Response"))  
+	if response['status-line'] and response['status-line']:match("200%s+OK") and response['body']  then
 		local body = response['body']:gsub("%%","%%%%")
 		stdnse.print_debug(2, ("%s: Body %s\n"):format(SCRIPT_NAME,body))  
 		port.version.name = "hbase-master"
@@ -117,8 +117,8 @@ action = function( host, port )
 			end
 		end
 		nmap.set_port_version(host, port, "hardmatched")
+		table.insert(result,"Region Servers:")
+		table.insert(result,region_servers)
+		return stdnse.format_output(true, result)
 	end
-	table.insert(result,"Region Servers:")
-	table.insert(result,region_servers)
-	return stdnse.format_output(true, result)
 end
