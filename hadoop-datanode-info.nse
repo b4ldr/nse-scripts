@@ -11,7 +11,7 @@ For more information about hadoop, see:
 
 ---
 -- @usage
--- nmap --script hadoop-datanode-info.nse -p 50075 host
+-- nmap -sV --script hadoop-datanode-info.nse -p 50075 host
 --
 -- @output
 -- PORT      STATE SERVICE         REASON
@@ -28,7 +28,7 @@ categories = {"default", "discovery", "safe"}
 require ("shortport")
 require ("http")
 
-portrule = shortport.port_or_service ({50075}, "hadoop-datanode", {"tcp"})
+portrule = shortport.http
 
 action = function( host, port )
 
@@ -36,8 +36,8 @@ action = function( host, port )
 	local uri = "/browseDirectory.jsp"
 	stdnse.print_debug(1, ("%s:HTTP GET %s:%s%s"):format(SCRIPT_NAME, host.targetname or host.ip, port.number, uri))
 	local response = http.get( host.targetname or host.ip, port.number, uri )
-	stdnse.print_debug(1, ("%s: Status %s"):format(SCRIPT_NAME,response['status-line']))  
-	if response['status-line']:match("200%s+OK") and response['body']  then
+	stdnse.print_debug(1, ("%s: Status %s"):format(SCRIPT_NAME,response['status-line'] or "No Response"))  
+	if response['status-line'] and response['status-line']:match("200%s+OK") and response['body']  then
 		port.version.name = "hadoop-datanode"
         	port.version.product = "Apache Hadoop"
 		nmap.set_port_version(host, port, "hardmatched")
@@ -48,6 +48,6 @@ action = function( host, port )
                         stdnse.print_debug(1, ("%s: Logs %s"):format(SCRIPT_NAME,logs))  
                         table.insert(result, ("Logs: %s"):format(logs))
                 end
+		return stdnse.format_output(true, result)
 	end
-	return stdnse.format_output(true, result)
 end
