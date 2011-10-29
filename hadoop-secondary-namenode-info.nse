@@ -18,7 +18,7 @@ For more information about Hadoop, see:
 
 ---
 -- @usage
--- nmap --script  hadoop-secondary-namenode-info -p 50090 host
+-- nmap -sV --script  hadoop-secondary-namenode-info -p 50090 host
 --
 -- @output
 -- PORT      STATE  SERVICE REASON
@@ -42,7 +42,7 @@ require ("shortport")
 require ("target")
 require ("http")
 
-portrule = shortport.port_or_service ({50090}, "hadoop-secondary-namenode", {"tcp"})
+portrule = shortport.http
 
 action = function( host, port )
 
@@ -50,8 +50,8 @@ action = function( host, port )
 	local uri = "/status.jsp"
 	stdnse.print_debug(1, ("%s:HTTP GET %s:%s%s"):format(SCRIPT_NAME, host.targetname or host.ip, port.number, uri))
 	local response = http.get( host.targetname or host.ip, port.number, uri )
-	stdnse.print_debug(1, ("%s: Status %s"):format(SCRIPT_NAME,response['status-line']))  
-	if response['status-line']:match("200%s+OK") and response['body']  then
+	stdnse.print_debug(1, ("%s: Status %s"):format(SCRIPT_NAME,response['status-line'] or "No Resposne"))  
+	if response['status-line'] and response['status-line']:match("200%s+OK") and response['body']  then
 		local body = response['body']:gsub("%%","%%%%")
 		local stats = {}
 		stdnse.print_debug(2, ("%s: Body %s\n"):format(SCRIPT_NAME,body))  
