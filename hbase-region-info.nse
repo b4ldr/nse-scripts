@@ -14,7 +14,7 @@ For more information about Hbase, see:
 
 ---
 -- @usage
--- nmap --script hbase-region-info -p 60030 host
+-- nmap -sV --script hbase-region-info -p 60030 host
 --
 -- @output
 -- PORT      STATE SERVICE      REASON
@@ -38,7 +38,7 @@ require ("shortport")
 require ("http")
 require ("target")
 
-portrule = shortport.port_or_service ({60030}, "hbase-region", {"tcp"})
+portrule = shortport.http
 
 action = function( host, port )
 
@@ -47,8 +47,8 @@ action = function( host, port )
 	local uri = "/regionserver.jsp"
 	stdnse.print_debug(1, ("%s:HTTP GET %s:%s%s"):format(SCRIPT_NAME, host.targetname or host.ip, port.number, uri))
 	local response = http.get( host.targetname or host.ip, port.number, uri )
-	stdnse.print_debug(1, ("%s: Status %s"):format(SCRIPT_NAME,response['status-line']))  
-	if response['status-line']:match("200%s+OK") and response['body']  then
+	stdnse.print_debug(1, ("%s: Status %s"):format(SCRIPT_NAME,response['status-line'] or "No Response"))  
+	if response['status-line'] and response['status-line']:match("200%s+OK") and response['body']  then
 		local body = response['body']:gsub("%%","%%%%")
 		stdnse.print_debug(2, ("%s: Body %s\n"):format(SCRIPT_NAME,body))  
 		port.version.name = "hbase-region"
@@ -82,6 +82,6 @@ action = function( host, port )
 			end
                 end
 		nmap.set_port_version(host, port, "hardmatched")
+		return stdnse.format_output(true, result)
 	end
-	return stdnse.format_output(true, result)
 end
