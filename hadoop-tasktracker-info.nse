@@ -13,7 +13,7 @@ For more information about Hadoop, see:
 
 ---
 -- @usage
--- nmap --script hadoop-tasktracker-info -p 50060 host
+-- nmap -sV --script hadoop-tasktracker-info -p 50060 host
 --
 -- @output
 -- PORT      STATE SERVICE            REASON
@@ -32,7 +32,7 @@ categories = {"default", "discovery", "safe"}
 require ("shortport")
 require ("http")
 
-portrule = shortport.port_or_service ({50060}, "hadoop-tasktracker", {"tcp"})
+portrule = shortport.http
 
 action = function( host, port )
 
@@ -40,8 +40,8 @@ action = function( host, port )
 	local uri = "/tasktracker.jsp"
 	stdnse.print_debug(1, ("%s:HTTP GET %s:%s%s"):format(SCRIPT_NAME, host.targetname or host.ip, port.number, uri))
 	local response = http.get( host.targetname or host.ip, port.number, uri )
-	stdnse.print_debug(1, ("%s: Status %s"):format(SCRIPT_NAME,response['status-line']))  
-	if response['status-line']:match("200%s+OK") and response['body']  then
+	stdnse.print_debug(1, ("%s: Status %s"):format(SCRIPT_NAME,response['status-line'] or "No Response"))  
+	if response['status-line'] and response['status-line']:match("200%s+OK") and response['body']  then
 		local body = response['body']:gsub("%%","%%%%")
 		stdnse.print_debug(2, ("%s: Body %s\n"):format(SCRIPT_NAME,body))  
 		port.version.name = "hadoop-tasktracker"
@@ -65,6 +65,6 @@ action = function( host, port )
                         table.insert(result, ("Logs: %s"):format(logs))
                 end
 		nmap.set_port_version(host, port, "hardmatched")
+		return stdnse.format_output(true, result)
 	end
-	return stdnse.format_output(true, result)
 end
