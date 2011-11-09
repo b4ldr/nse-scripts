@@ -16,6 +16,9 @@ For more information about Hadoop, see:
 ]]
 
 ---
+-- @args hadoop-info.force force this script to on http(s) ports
+-- this arg applies to all hadoop-*-info scripts
+--
 -- @usage
 -- nmap -sV --script hadoop-namenode-info -p 50070 host
 --
@@ -46,9 +49,15 @@ require ("shortport")
 require ("target")
 require ("http")
 
--- portrule = shortport.http
-portrule = shortport.http
-
+portrule = function(host, port) 
+	local force = stdnse.get_script_args('hadoop-info.force')
+	if not force then
+		return shortport.http and port.number ~= 80  and port.number ~= 443
+	else
+		return true
+	end
+end
+	
 get_datanodes = function( host, port, Status )
 	local result = {}
 	local uri = "/dfsnodelist.jsp?whatNodes=" .. Status

@@ -12,6 +12,9 @@ For more information about Hadoop, see:
 ]]
 
 ---
+-- @args hadoop-info.force force this script to on http(s) ports
+-- this arg applies to all hadoop-*-info scripts
+--
 -- @usage
 -- nmap -sV --script hadoop-tasktracker-info -p 50060 host
 --
@@ -32,7 +35,14 @@ categories = {"default", "discovery", "safe"}
 require ("shortport")
 require ("http")
 
-portrule = shortport.http
+portrule = function(host, port)
+        local force = stdnse.get_script_args('hadoop-info.force')
+        if not force then
+                return shortport.http and port.number ~= 80  and port.number ~= 443
+        else
+                return true
+        end
+end
 
 action = function( host, port )
 

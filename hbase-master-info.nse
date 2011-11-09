@@ -17,6 +17,9 @@ For more information about Hbase, see:
 ]]
 
 ---
+-- @args hbase-info.force force this script to on http(s) ports
+-- this arg applies to all hbase-*-info scripts
+--
 -- @usage
 -- nmap -sV --script hbase-master-info -p 60010 host
 --
@@ -43,7 +46,14 @@ require ("shortport")
 require ("http")
 require ("target")
 
-portrule = shortport.http
+portrule = function(host, port)
+        local force = stdnse.get_script_args('hbase-info.force')
+        if not force then
+                return shortport.http and port.number ~= 80  and port.number ~= 443
+        else
+                return true
+        end
+end
 
 action = function( host, port )
 

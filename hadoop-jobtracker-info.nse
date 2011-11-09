@@ -17,6 +17,9 @@ For more information about Hadoop, see:
 ]]
 
 ---
+-- @args hadoop-info.force force this script to on http(s) ports
+-- this arg applies to all hadoop-*-info scripts
+--
 -- @usage
 -- nmap -sV --script hadoop-jobtracker-info [--script-args=hadoop-jobtracker-info.userinfo] -p 50030 host
 -- 
@@ -46,7 +49,14 @@ require ("shortport")
 require ("target")
 require ("http")
 
-portrule = shortport.http
+portrule = function(host, port)
+        local force = stdnse.get_script_args('hadoop-info.force')
+        if not force then
+                return shortport.http and port.number ~= 80  and port.number ~= 443
+        else
+                return true
+        end
+end
 
 get_userhistory = function( host, port )
         local results = {}
