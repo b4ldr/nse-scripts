@@ -49,13 +49,8 @@ require ("shortport")
 require ("target")
 require ("http")
 
-portrule = function(host, port)
-        local force = stdnse.get_script_args('hadoop-info.force')
-        if not force then
-                return shortport.http and port.number ~= 80  and port.number ~= 443
-        else
-                return true
-        end
+portrule = function(host, port) 
+        return shortport.http_service(host,port) and not shortport.http_port(host,port) or stdnse.get_script_args('hadoop-info.force') 
 end
 
 get_userhistory = function( host, port )
