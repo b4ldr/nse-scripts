@@ -46,14 +46,24 @@ require "shortport"
 require "dns"
 
 portrule = shortport.port_or_service(53, "domain", {"tcp", "udp"})
-
+local function processOPT(optPkt)
+	
+end
 local function rr_filter(pktRR, label)
         local result = {}
         for _, rec in ipairs(pktRR) do
-		 stdnse.print_debug(rec.data)
-                if rec[label] then
-                        result[#result + 1] = rec[label]
-                end
+               	if rec[label] then
+			if rec.dtype == 41 then
+		--		processOPT(rec.data)
+		 		stdnse.print_debug("number %d", string.len(rec.data))
+				local _,nsid =  bin.unpack(">H".. ( string.len(rec.data) - 4 ), rec.data , 4)
+		 		stdnse.print_debug("number %s", nsid)
+
+			else
+		 		stdnse.print_debug(rec.data)
+                        	result[#result + 1] = rec[label]
+                	end
+		end
         end
         return result
 end
