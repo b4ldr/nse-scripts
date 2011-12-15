@@ -46,18 +46,19 @@ require "shortport"
 require "dns"
 
 portrule = shortport.port_or_service(53, "domain", {"tcp", "udp"})
-local function processOPT(optPkt)
-	
+local function hextoasci(str)
+	return string.gsub(str, '[0-9a-fA-F][0-9a-fA-F]', function(m) return string.char(loadstring('return 0x' .. m)()) end)
 end
+
 local function rr_filter(pktRR, label)
         local result = {}
         for _, rec in ipairs(pktRR) do
                	if rec[label] then
 			if rec.dtype == 41 then
-		--		processOPT(rec.data)
 		 		stdnse.print_debug("number %d", string.len(rec.data))
-				local _,nsid =  bin.unpack(">H".. ( string.len(rec.data) - 4 ), rec.data , 4)
-		 		stdnse.print_debug("number %s", nsid)
+				local _,nsid =  bin.unpack(">H".. ( string.len(rec.data) - 3 ), rec.data , 4)
+		 		stdnse.print_debug("hex %s", nsid)
+		 		stdnse.print_debug("asci %s", hextoasci(nsid))
 
 			else
 		 		stdnse.print_debug(rec.data)
