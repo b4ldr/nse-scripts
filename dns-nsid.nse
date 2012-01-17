@@ -1,8 +1,9 @@
 description = [[
-Ateemps to get more information from a server by requesting the server nsid[1], and asking 
-for id.server[2] and version.bind.  This script dose the same as the following two dig commands
-dig CH TXT bind.version @target
-dig +nsid CH TXT id.server @target
+Ateemps to get more information from a server by requesting the server nsid[1],
+and asking for id.server[2] and version.bind. This script dose the same as the
+following two dig commands:
+  - dig CH TXT bind.version @target
+  - dig +nsid CH TXT id.server @target
 
 [1]http://www.ietf.org/rfc/rfc5001.txt
 [2]http://www.ietf.org/rfc/rfc4892.txt
@@ -30,51 +31,39 @@ require "shortport"
 require "dns"
 
 portrule = shortport.port_or_service(53, "domain", {"tcp", "udp"})
-local function hextoasci(str)
-	return string.gsub(str, '[0-9a-fA-F][0-9a-fA-F]', function(m) return string.char(loadstring('return 0x' .. m)()) end)
-end
 
 local function rr_filter(pktRR, label)
-        local result = ""
-        for _, rec in ipairs(pktRR) do
-               	if rec[label] then
-			if rec.dtype == 41 then
-				if #rec.data > 0 then
-					local _,nsid =  bin.unpack(">H".. ( string.len(rec.data) - 3 ), rec.data , 4)
-                        		result =  hextoasci(nsid) .. " (" ..  nsid ..")"
-				else 
-					result = "No Answer"
+	for _, rec in ipairs(pktRR, label) do
+		if ( rec[label] and 0 < #rec.data ) then
+			if ( dns.types.OPT == rec.dtype ) then
+				local pos, _, len = bin.unpack(">SS", rec.data)
+				if ( len ~= #rec.data - pos + 1 ) then
+					return false, "Failed to decode NSID"
 				end
+				return true, select(2, bin.unpack("A" .. len, rec.data, pos))
 			else
-                        	result = rec.data
-                	end
+				return true, select(2, bin.unpack("p", rec.data))
+			end
 		end
-        end
-        return result
+	end
 end
 
--- Enumerate a single domain.
-local function getNSID(host, port)
-
+action = function(host, port)	
 	local result = {}
-	local status, result, nsec
-	stdnse.print_debug("Trying id.server")
-	status, result = dns.query("id.server", {host = host.ip, dtype='TXT', class=3, retAll=true, retPkt=true, nsid=true, dnssec=true})
-	if status then
-		local nsid = rr_filter(result.add,'OPT')
-		result[#result + 1] = "NSID: " .. nsid
-		local id_server = rr_filter(result.answers,'TXT')
-		result[#result + 1] = "id.server: " .. id_server
-			
+	local status, resp = dns.query("id.server", {host = host.ip, dtype='TXT', class=dns.CLASS.CH, retAll=true, retPkt=true, nsid=true, dnssec=true})
+	if ( status ) then
+		local status, nsid = rr_filter(resp.add,'OPT')
+		if ( status ) then
+			table.insert(result, ("NSID: %s (%s)"):format(nsid, stdnse.tohex(nsid)))
+		end
+		local status, id_server = rr_filter(resp.answers,'TXT')
+		if ( status ) then
+			table.insert(result, ("id.server: %s"):format(id_server))
+		end
 	end
-	status, bind_version = dns.query("version.bind", {host = host.ip, dtype='TXT', class=3})
-	if status then
-		result[#result + 1] = "bind.version: " .. bind_version
+	local status, bind_version = dns.query("version.bind", {host = host.ip, dtype='TXT', class=dns.CLASS.CH})
+	if ( status ) then
+		table.insert(result, ("bind.version: %s"):format(bind_version))
 	end
-	return result
-end
-
-action = function(host, port)
-	local output = getNSID(host, port)
-	return stdnse.format_output(true, output)
+	return stdnse.format_output(true, result)
 end
