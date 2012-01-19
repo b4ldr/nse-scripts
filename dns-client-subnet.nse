@@ -32,15 +32,22 @@ require "dns"
 
 portrule = shortport.port_or_service(53, "domain", {"tcp", "udp"})
 
+
 local function rr_filter(pktRR, label)
 	for _, rec in ipairs(pktRR, label) do
 		if ( rec[label] and 0 < #rec.data ) then
 			if ( dns.types.OPT == rec.dtype ) then
-				local pos, _, len = bin.unpack(">SS", rec.data)
+				local ip = {}
+				local pos, _, len, family, src_mask, scope_mask  = bin.unpack(">SSSCC", rec.data)
+				pos,  ip[1], ip[2], ip[3], ip[4] =  bin.unpack(">C4", rec.data, pos)
+				address = table.concat(ip, ".")
+				stdnse.print_debug("family: %s",family)
+				stdnse.print_debug("src_mask: %s",src_mask)
+				stdnse.print_debug("scope_mask: %s",scope_mask)
+				stdnse.print_debug("address: %s",address)
 				if ( len ~= #rec.data - pos + 1 ) then
-					return false, "Failed to decode NSID"
+					return false, "Failed to decode client-subnet"
 				end
-				return true, select(2, bin.unpack("A" .. len, rec.data, pos))
 			end
 		end
 	end
@@ -64,7 +71,7 @@ action = function(host, port)
 
 	client_subnet.family = 1
 	client_subnet.address = address
-	client_subnet.mask = 32
+	client_subnet.mask = 23
 	-- local status, resp = dns.query(domain, {host = nameserver,  retAll=true, retPkt=true, client_subnet=client_subnet})
 	local status, resp = dns.query(domain, {host = nameserver,  retAll=true, retPkt=true, client_subnet=client_subnet})
 	if ( status ) then
@@ -76,6 +83,7 @@ action = function(host, port)
 				table.insert(result, ("A : %s"):format(answer))
 			end
 		end
+		rr_filter(resp.add,'OPT')
 	end
 	return stdnse.format_output(true, result)
 end
