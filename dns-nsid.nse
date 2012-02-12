@@ -63,7 +63,7 @@ action = function(host, port)
 	end
 	local status, bind_version = dns.query("version.bind", {host = host.ip, dtype='TXT', class=dns.CLASS.CH})
 	if ( status ) then
-		table.insert(result, ("bind.version: %s"):format(bind_version))
+		table.insert(result, ("version.bind: %s"):format(bind_version))
 	end
 	return stdnse.format_output(true, result)
 end
