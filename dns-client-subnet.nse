@@ -11,7 +11,7 @@ who has implmented this yet other then google.
 -- @args dns-client-subnet.nameserver nameserver to use.  (default = host.ip)
 -- 
 -- @usage
--- nmap -sU -p 53 --script dns-client-subnet i --script-args \
+-- nmap -sU -p 53 --script dns-client-subnet  --script-args \
 -- dns-client-subnet.domain=www.example.com,dns-client-subnet.address=192.168.0.1 \
 -- [,dns-client-subnet.nameserver=8.8.8.8] <target>
 --
@@ -38,16 +38,12 @@ local function rr_filter(pktRR, label)
 		if ( rec[label] and 0 < #rec.data ) then
 			if ( dns.types.OPT == rec.dtype ) then
 				local ip = {}
-				local pos, _, len, family, src_mask, scope_mask  = bin.unpack(">SSSCC", rec.data)
+				local client_subnet = {}
+				local pos, _
+				pos, _, len, client_subnet.family, client_subnet.src_mask, client_subnet.scope_mask  = bin.unpack(">SSSCC", rec.data)
 				pos,  ip[1], ip[2], ip[3], ip[4] =  bin.unpack(">C4", rec.data, pos)
-				address = table.concat(ip, ".")
-				stdnse.print_debug("family: %s",family)
-				stdnse.print_debug("src_mask: %s",src_mask)
-				stdnse.print_debug("scope_mask: %s",scope_mask)
-				stdnse.print_debug("address: %s",address)
-				if ( len ~= #rec.data - pos + 1 ) then
-					return false, "Failed to decode client-subnet"
-				end
+				client_subnet.address = table.concat(ip, ".")
+				return client_subnet	
 			end
 		end
 	end
@@ -58,7 +54,7 @@ action = function(host, port)
 	local nameserver = stdnse.get_script_args('dns-client-subnet.nameserver')
 	local domain =  stdnse.get_script_args('dns-client-subnet.domain')
 	local address =  stdnse.get_script_args('dns-client-subnet.address')
-	local client_subnet = {}
+	local mask =  stdnse.get_script_args('dns-client-subnet.mask')
 	if not domain then
 		return string.format("dns-client-subnet.domain missing")
 	end
@@ -68,11 +64,24 @@ action = function(host, port)
 	if not nameserver then
 		nameserver = host.ip
 	end
+	if not mask then
+		mask = 24
+	end
+	local addr = stdnse.strsplit("%.",address)
+	local addr_no
+	-- use this so we can pass addresses as dotted quade or int
+	if #addr > 1 then
+		addr_no = (tonumber(addr[1])*16777216 + tonumber(addr[2])*65536 
+			+ tonumber(addr[3])*256 + tonumber(addr[4]))	
+	else
+		addr_no = tonumber(addr[1])
+	end
+	address = addr_no
 
+	local client_subnet = {}
 	client_subnet.family = 1
 	client_subnet.address = address
-	client_subnet.mask = 23
-	-- local status, resp = dns.query(domain, {host = nameserver,  retAll=true, retPkt=true, client_subnet=client_subnet})
+	client_subnet.mask = mask
 	local status, resp = dns.query(domain, {host = nameserver,  retAll=true, retPkt=true, client_subnet=client_subnet})
 	if ( status ) then
 		local status, answer = dns.findNiceAnswer(dns.types.A, resp, true)
@@ -83,7 +92,10 @@ action = function(host, port)
 				table.insert(result, ("A : %s"):format(answer))
 			end
 		end
-		rr_filter(resp.add,'OPT')
+		local client_subnet_resp = rr_filter(resp.add,'OPT')
+		if client_subnet_resp then
+			table.insert(result, ("details : %s/%s/%s"):format(client_subnet_resp.src_mask,client_subnet_resp.scope_mask,client_subnet_resp.address))
+		end
 	end
 	return stdnse.format_output(true, result)
 end
