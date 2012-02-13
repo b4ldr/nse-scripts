@@ -84,7 +84,7 @@ action = function(host, port)
 						break
 					else
 						for i, prefix in ipairs(stdnse.strsplit("\n",data)) do
-							if ( #prefix > 0 ) then
+							if ( #prefix > 1 ) then
 								table.insert(prefixes,prefix)
 								if target.ALLOW_NEW_TARGETS then
 									stdnse.print_debug("Added targets: "..prefix)
