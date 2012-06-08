@@ -83,7 +83,7 @@ action = function( host, port )
 		port.version.name = "flume-master"
 		port.version.product = "Apache Flume"
 		if body:match("Version:%s*</b>([^][,]+)") then
-			local version = body:match("Version:%s*<td>([^][,]+)")
+			local version = body:match("Version:%s*</b>([^][,]+)")
 			stdnse.print_debug(1, ("%s: Version %s"):format(SCRIPT_NAME,version))
 			table.insert(result, ("Version: %s"):format(version))
 			port.version.version = version
