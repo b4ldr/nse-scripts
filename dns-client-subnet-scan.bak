@@ -1,77 +1,281 @@
-local dns = require "dns"
-local ipOps = require "ipOps"
-local nmap = require "nmap"
-local shortport = require "shortport"
-local stdnse = require "stdnse"
-local table = require "table"
-
 description = [[
-Performs a domain lookup using the edns-client-subnet option that adds
-support for adding subnet information to the query describing where the
-query is originating. The script uses this option to supply a number of
-geographically distributed locations in an attempt to enumerate as many
-different address records as possible. The script also supports requests using
-a given subnet.
-
-* http://tools.ietf.org/html/draft-vandergaast-edns-client-subnet-00
+Implements the edns-client-subnet IETF draft[1].  Can be used to find what ip
+address CDN networks provide when serving different client ip/subnet.  not sure
+who has implmented this yet other then google.
+[1]http://tools.ietf.org/html/draft-vandergaast-edns-client-subnet-00
 ]]
 
 ---
+-- @args dns-client-subnet.domain The domain to lookup
+-- @args dns-client-subnet.address the client address to use
+-- @args dns-client-subnet.nameserver nameserver to use.  (default = host.ip)
+-- @args dns-client-subnet.maxmind_db=<filename>
+-- 
 -- @usage
---   nmap -sU -p 53 --script dns-client-subnet-scan  --script-args \
---     dns-client-subnet-scan.domain=www.example.com, \
---     dns-client-subnet-scan.address=192.168.0.1 \
---     [,dns-client-subnet.nameserver=8.8.8.8] \
---     [,dns-client-subnet.mask=24] <target>
---   nmap --script dns-client-subnet-scan --script-args \
---     dns-client-subnet-scan.domain=www.example.com, \
---     dns-client-subnet-scan.address=192.168.0.1 \
---     dns-client-subnet.nameserver=8.8.8.8, \
---     [,dns-client-subnet.mask=24]
+-- nmap -sU -p 53 --script dns-client-subnet  --script-args \
+-- dns-client-subnet.domain=www.example.com,dns-client-subnet.address=192.168.0.1 \
+-- [,dns-client-subnet.nameserver=8.8.8.8,dns-client-subnet.maxmind_db=<filename>] <target>
 --
 -- @output
 -- 53/udp open  domain  udp-response
--- | dns-client-subnet-scan: 
--- | www.google.com
--- |   1.2.3.4
--- |   5.6.7.8
--- |   9.10.11.12
--- |   13.14.15.16
--- |   .
--- |   .
--- |_  .
+-- | dns-client-subnet: 
+-- |_  A : 127.0.0.1,127.0.0.2,127.0.0.3
 ---
--- @args dns-client-subnet.domain The domain to lookup eg. www.example.org
--- @args dns-client-subnet.address The client subnet address to use
--- @args dns-client-subnet.mask [optional] The number of bits to use as subnet mask (default: 24)
--- @args dns-client-subnet.nameserver [optional] nameserver to use.  (default = host.ip)
---
 
 author = "John Bond"
 license = "Simplified (2-clause) BSD license--See http://nmap.org/svn/docs/licenses/BSD-simplified"
-categories = {"discovery", "safe"}
 
+categories = {"discovery" }
 
-local argNS = stdnse.get_script_args(SCRIPT_NAME .. '.nameserver')
-local argDomain = stdnse.get_script_args(SCRIPT_NAME .. '.domain')
-local argMask = stdnse.get_script_args(SCRIPT_NAME .. '.mask') or 24
-local argAddr = stdnse.get_script_args(SCRIPT_NAME .. '.address')
+require "stdnse"
+require "shortport"
+require "dns"
 
-prerule = function()
-	if ( not(argDomain) or nmap.address_family() ~= "inet" ) then
-		return false
-	end
-	return true
-end
+portrule = shortport.port_or_service(53, "domain", {"tcp", "udp"})
 
-portrule = function(host, port)
-	if ( nmap.address_family() ~= "inet" ) then
-		return false
-	else
-		return shortport.port_or_service(53, "domain", {"tcp", "udp"})(host, port)
-	end
-end
-
+local countryIPs = {
+	A1 = {ip=846537728, desc="A1"},
+	A2 = {ip=620864512, desc="A2"},
+	AD = {ip=533285888, desc="AD"},
+	AE = {ip=520501504, desc="AE"},
+	AF = {ip=460601344, desc="AF"},
+	AG = {ip=533267148, desc="AG"},
+	AI = {ip=780702976, desc="AI"},
+	AL = {ip=521547776, desc="AL"},
+	AM = {ip=520593408, desc="AM"},
+	AN = {ip=539627248, desc="AN"},
+	AO = {ip=533266708, desc="AO"},
+	AP = {ip=2063372288, desc="AP"},
+	AQ = {ip=774161152, desc="AQ"},
+	AR = {ip=533266536, desc="AR"},
+	AS = {ip=780667392, desc="AS"},
+	AT = {ip=34953216, desc="AT"},
+	AU = {ip=16777216, desc="AU"},
+	AW = {ip=780705280, desc="AW"},
+	AX = {ip=533285376, desc="AX"},
+	AZ = {ip=531292160, desc="AZ"},
+	BA = {ip=533266884, desc="BA"},
+	BB = {ip=533267076, desc="BB"},
+	BD = {ip=453009408, desc="BD"},
+	BE = {ip=35010304, desc="BE"},
+	BF = {ip=533267004, desc="BF"},
+	BG = {ip=520994816, desc="BG"},
+	BH = {ip=533266852, desc="BH"},
+	BI = {ip=533267128, desc="BI"},
+	BJ = {ip=533267028, desc="BJ"},
+	BM = {ip=780708352, desc="BM"},
+	BN = {ip=533266960, desc="BN"},
+	BO = {ip=533266864, desc="BO"},
+	BR = {ip=533266456, desc="BR"},
+	BS = {ip=533267020, desc="BS"},
+	BT = {ip=533267140, desc="BT"},
+	BV = {ip=780709888, desc="BV"},
+	BW = {ip=692781056, desc="BW"},
+	BY = {ip=528664576, desc="BY"},
+	BZ = {ip=523024896, desc="BZ"},
+	CA = {ip=68314144, desc="CA"},
+	CC = {ip=780711168, desc="CC"},
+	CD = {ip=533266948, desc="CD"},
+	CF = {ip=533267112, desc="CF"},
+	CG = {ip=533266964, desc="CG"},
+	CH = {ip=520323072, desc="CH"},
+	CI = {ip=533266840, desc="CI"},
+	CK = {ip=774162484, desc="CK"},
+	CL = {ip=533266608, desc="CL"},
+	CM = {ip=533266844, desc="CM"},
+	CN = {ip=16777728, desc="CN"},
+	CO = {ip=533266568, desc="CO"},
+	CR = {ip=533266804, desc="CR"},
+	CU = {ip=780714240, desc="CU"},
+	CV = {ip=533267124, desc="CV"},
+	CY = {ip=521558016, desc="CY"},
+	CZ = {ip=37265408, desc="CZ"},
+	DE = {ip=34604544, desc="DE"},
+	DJ = {ip=533267144, desc="DJ"},
+	DK = {ip=40411136, desc="DK"},
+	DM = {ip=780716288, desc="DM"},
+	DO = {ip=533266752, desc="DO"},
+	DZ = {ip=533266628, desc="DZ"},
+	EC = {ip=533266724, desc="EC"},
+	EE = {ip=521680896, desc="EE"},
+	EG = {ip=533266592, desc="EG"},
+	EH = {ip=780717824, desc="EH"},
+	ER = {ip=533267104, desc="ER"},
+	ES = {ip=34910976, desc="ES"},
+	ET = {ip=533266812, desc="ET"},
+	EU = {ip=34603008, desc="EU"},
+	FI = {ip=520556544, desc="FI"},
+	FJ = {ip=461078528, desc="FJ"},
+	FK = {ip=780719360, desc="FK"},
+	FM = {ip=774162096, desc="FM"},
+	FO = {ip=533271296, desc="FO"},
+	FR = {ip=34013184, desc="FR"},
+	GA = {ip=533266952, desc="GA"},
+	GB = {ip=34912000, desc="GB"},
+	GD = {ip=780720896, desc="GD"},
+	GE = {ip=529661952, desc="GE"},
+	GF = {ip=780721408, desc="GF"},
+	GH = {ip=533266868, desc="GH"},
+	GI = {ip=780672512, desc="GI"},
+	GL = {ip=533272832, desc="GL"},
+	GM = {ip=533267152, desc="GM"},
+	GN = {ip=533267072, desc="GN"},
+	GP = {ip=780723200, desc="GP"},
+	GQ = {ip=533266900, desc="GQ"},
+	GR = {ip=34648576, desc="GR"},
+	GS = {ip=780723968, desc="GS"},
+	GT = {ip=533266776, desc="GT"},
+	GU = {ip=780724480, desc="GU"},
+	GW = {ip=780724736, desc="GW"},
+	GY = {ip=533267108, desc="GY"},
+	HK = {ip=234913792, desc="HK"},
+	HN = {ip=533266892, desc="HN"},
+	HR = {ip=523100160, desc="HR"},
+	HT = {ip=533267024, desc="HT"},
+	HU = {ip=521670912, desc="HU"},
+	ID = {ip=241604608, desc="ID"},
+	IE = {ip=520564736, desc="IE"},
+	IL = {ip=36962304, desc="IL"},
+	IM = {ip=533274880, desc="IM"},
+	IN = {ip=28999680, desc="IN"},
+	IO = {ip=774162287, desc="IO"},
+	IQ = {ip=521766912, desc="IQ"},
+	IR = {ip=42991616, desc="IR"},
+	IS = {ip=521105408, desc="IS"},
+	IT = {ip=34620928, desc="IT"},
+	JM = {ip=533266904, desc="JM"},
+	JO = {ip=533266824, desc="JO"},
+	JP = {ip=16781312, desc="JP"},
+	KE = {ip=533266808, desc="KE"},
+	KG = {ip=521994240, desc="KG"},
+	KH = {ip=460156928, desc="KH"},
+	KI = {ip=3389421568, desc="KI"},
+	KM = {ip=700588032, desc="KM"},
+	KN = {ip=1358904720, desc="KN"},
+	KP = {ip=1126951968, desc="KP"},
+	KR = {ip=17498112, desc="KR"},
+	KW = {ip=533266648, desc="KW"},
+	KY = {ip=1249210368, desc="KY"},
+	KZ = {ip=38273024, desc="KZ"},
+	LA = {ip=1114657928, desc="LA"},
+	LB = {ip=533266784, desc="LB"},
+	LI = {ip=520753152, desc="LI"},
+	LK = {ip=533266756, desc="LK"},
+	LR = {ip=533267160, desc="LR"},
+	LS = {ip=533267036, desc="LS"},
+	LT = {ip=523001856, desc="LT"},
+	LU = {ip=520897024, desc="LU"},
+	LV = {ip=522866688, desc="LV"},
+	LY = {ip=533266716, desc="LY"},
+	MA = {ip=533266700, desc="MA"},
+	MC = {ip=533278464, desc="MC"},
+	MD = {ip=522125312, desc="MD"},
+	ME = {ip=533267080, desc="ME"},
+	MG = {ip=533267008, desc="MG"},
+	MH = {ip=1076298696, desc="MH"},
+	MK = {ip=520312960, desc="MK"},
+	ML = {ip=533266992, desc="ML"},
+	MM = {ip=533266800, desc="MM"},
+	MN = {ip=461100032, desc="MN"},
+	MO = {ip=460161024, desc="MO"},
+	MP = {ip=1079396352, desc="MP"},
+	MQ = {ip=787388416, desc="MQ"},
+	MR = {ip=533267084, desc="MR"},
+	MS = {ip=1161425936, desc="MS"},
+	MT = {ip=533267012, desc="MT"},
+	MU = {ip=533266988, desc="MU"},
+	MV = {ip=533266576, desc="MV"},
+	MW = {ip=533267064, desc="MW"},
+	MX = {ip=68296776, desc="MX"},
+	MY = {ip=17383424, desc="MY"},
+	MZ = {ip=692846592, desc="MZ"},
+	NA = {ip=533266972, desc="NA"},
+	NC = {ip=460980224, desc="NC"},
+	NE = {ip=533267048, desc="NE"},
+	NF = {ip=774162638, desc="NF"},
+	NG = {ip=533266596, desc="NG"},
+	NI = {ip=533267032, desc="NI"},
+	NL = {ip=34954752, desc="NL"},
+	NO = {ip=521699328, desc="NO"},
+	NP = {ip=243272704, desc="NP"},
+	NR = {ip=3412254720, desc="NR"},
+	NU = {ip=832319488, desc="NU"},
+	NZ = {ip=234954752, desc="NZ"},
+	OM = {ip=533266736, desc="OM"},
+	PA = {ip=533266820, desc="PA"},
+	PE = {ip=533266632, desc="PE"},
+	PF = {ip=774161825, desc="PF"},
+	PG = {ip=247482368, desc="PG"},
+	PH = {ip=19202048, desc="PH"},
+	PK = {ip=456554496, desc="PK"},
+	PL = {ip=520504319, desc="PL"},
+	PM = {ip=3332724736, desc="PM"},
+	PN = {ip=774162829, desc="PN"},
+	PR = {ip=201897984, desc="PR"},
+	PS = {ip=520986624, desc="PS"},
+	PT = {ip=521568256, desc="PT"},
+	PW = {ip=1079427584, desc="PW"},
+	PY = {ip=533266872, desc="PY"},
+	QA = {ip=520826880, desc="QA"},
+	RE = {ip=701865984, desc="RE"},
+	RO = {ip=520277761, desc="RO"},
+	RS = {ip=533266792, desc="RS"},
+	RU = {ip=37289984, desc="RU"},
+	RW = {ip=533267044, desc="RW"},
+	SA = {ip=521723904, desc="SA"},
+	SB = {ip=774161835, desc="SB"},
+	SC = {ip=533267164, desc="SC"},
+	SD = {ip=533266720, desc="SD"},
+	SE = {ip=34620416, desc="SE"},
+	SG = {ip=452986880, desc="SG"},
+	SI = {ip=521109504, desc="SI"},
+	SJ = {ip=533266528, desc="SJ"},
+	SK = {ip=520298496, desc="SK"},
+	SL = {ip=533267116, desc="SL"},
+	SM = {ip=532750336, desc="SM"},
+	SN = {ip=533266944, desc="SN"},
+	SO = {ip=692996096, desc="SO"},
+	SR = {ip=533267088, desc="SR"},
+	ST = {ip=3272083456, desc="ST"},
+	SV = {ip=533266848, desc="SV"},
+	SY = {ip=520683520, desc="SY"},
+	SZ = {ip=533267092, desc="SZ"},
+	TC = {ip=1085683906, desc="TC"},
+	TD = {ip=533267016, desc="TD"},
+	TG = {ip=533267100, desc="TG"},
+	TH = {ip=16809984, desc="TH"},
+	TJ = {ip=533267052, desc="TJ"},
+	TK = {ip=459282432, desc="TK"},
+	TL = {ip=3032326144, desc="TL"},
+	TM = {ip=533283840, desc="TM"},
+	TN = {ip=533266772, desc="TN"},
+	TO = {ip=774162513, desc="TO"},
+	TR = {ip=520290304, desc="TR"},
+	TT = {ip=533266856, desc="TT"},
+	TV = {ip=774161815, desc="TV"},
+	TW = {ip=19005440, desc="TW"},
+	TZ = {ip=533266836, desc="TZ"},
+	UA = {ip=37224448, desc="UA"},
+	UG = {ip=533266876, desc="UG"},
+	UM = {ip=1062250496, desc="UM"},
+	US = {ip=67108864, desc="US"},
+	UY = {ip=533266780, desc="UY"},
+	UZ = {ip=528994304, desc="UZ"},
+	VA = {ip=533273344, desc="VA"},
+	VC = {ip=3631112386, desc="VC"},
+	VE = {ip=533266564, desc="VE"},
+	VG = {ip=783202304, desc="VG"},
+	VI = {ip=201859072, desc="VI"},
+	VN = {ip=20217856, desc="VN"},
+	VU = {ip=774161845, desc="VU"},
+	WF = {ip=461225984, desc="WF"},
+	WS = {ip=1085672352, desc="WS"},
+	YE = {ip=522170368, desc="YE"},
+	YT = {ip=3254306816, desc="YT"},
+	ZA = {ip=533266540, desc="ZA"},
+	ZM = {ip=533266888, desc="ZM"},
+	ZW = {ip=533267056, desc="ZW"}
+}
 local areaIPs = {
 	A4 = {ip=47763456, desc="GB,A4,Bath"},
 	A5 = {ip=1043402336, desc="GB,A5,Biggleswade"},
@@ -303,55 +507,49 @@ local areaIPs = {
 	Z3 = {ip=35147776, desc="GB,Z3,Barry"},
 	Z4 = {ip=40321024, desc="GB,Z4,Wrexham"}
 }
-
 local get_addresses = function(address, mask, domain, nameserver) 
-
-	-- translate the IP's in the areaIPs to strings, as this is what the
-	-- DNS library expects
-	if ( "number" == type(address) ) then
-		address = ipOps.fromdword(address)
-		local a, b, c, d = address:match("(%d+)%.(%d+)%.(%d+)%.(%d+)")
-		address = ("%d.%d.%d.%d"):format(d,c,b,a)
-	end
-
-	local subnet = { family = nmap.address_family(), address = address, mask = mask }
-	local status, resp = dns.query(domain, {host = nameserver, retAll=true, subnet=subnet})
-	if ( not(status) ) then
-		return
-	end
-	if ( "table" ~= type(resp) ) then resp = { resp } end
-	return resp
-end
-
-local function fail(err) return ("\n  ERROR: %s"):format(err or "") end
-
-action = function(host, port)	
-
-	if ( not(argDomain) ) then
-		return fail(SCRIPT_NAME .. ".domain was not specified")
-	end
-	
-	local nameserver = argNS or (host and host.ip)
-	-- as the nameserver argument overrides the host.ip, the prerule should
-	-- already have done our work, so abort
-	if ( argNS and host ) then
-		return
-	-- if we have no nameserver argument and no host, we dont have sufficient
-	-- information to continue, abort
-	elseif ( not(argNS) and not(host) ) then
-		return		
-	end
-	
-	local addrs = argAddr or areaIPs
-	if ( "string" == type(addrs) ) then	addrs = {{ ip = addrs }} end
-
-	local lookup, result = {}, { name = argDomain }
-	for _,ip in pairs(addrs) do
-		for _, addr in ipairs( get_addresses (ip.ip, argMask, argDomain, nameserver) ) do
-			lookup[addr] = true
+	local client_subnet = {}
+	client_subnet.family = 1
+	client_subnet.address = address
+	client_subnet.mask = mask
+	local status, resp = dns.query(domain, {host = nameserver,  retAll=true, retPkt=true, client_subnet=client_subnet})
+	if ( status ) then
+		local status, answer = dns.findNiceAnswer(dns.types.A, resp, true)
+		if ( status ) then
+			if type(answer) == "table" then
+				return answer
+			else
+				return {answer}
+			end
 		end
 	end
-	for addr in pairs(lookup) do table.insert(result, addr) end
+end
+
+action = function(host, port)	
+	local result = {}
+	local seen = {}
+	local nameserver = stdnse.get_script_args('dns-client-subnet-scan.nameserver')
+	local domain =  stdnse.get_script_args('dns-client-subnet-scan.domain')
+	local mask =  stdnse.get_script_args('dns-client-subnet-scan.mask')
+	if not domain then
+		return string.format("dns-client-subnet.domain missing")
+	end
+	if not nameserver then
+		nameserver = host.ip
+	end
+	if not mask then
+		mask = 24
+	end
+	for _,ip in pairs(areaIPs) do
+		-- local addresses = get_addresses (ip.ip, mask, domain, nameserver)
+		-- table.insert(result, addresses)
+		for _, addr in ipairs( get_addresses (ip.ip, mask, domain, nameserver) ) do
+			if not seen[addr] then
+				table.insert(result, addr)
+				seen[addr] = #result
+			end
+		end
+	end
 	table.sort(result)
 	return stdnse.format_output(true, result)
 end
