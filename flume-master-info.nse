@@ -44,35 +44,46 @@ portrule = function(host, port)
 		or (shortport.service(shortport.LIKELY_HTTP_SERVICES)(host, port) and not shortport.portnumber(shortport.LIKELY_HTTP_PORTS)(host, port))
 end
 
-get_datanodes = function( host, port, Status )
+-- ref: http://lua-users.org/wiki/TableUtils
+function table_count(tt, item)
+	local count
+	count = 0
+	for ii,xx in pairs(tt) do
+		if item == xx then count = count + 1 end
+	end
+	return count
+end
+
+getenv = function( host, port )
 	local result = {}
-	local uri = "flumemaster.jsp" .. Status
-	stdnse.print_debug(1, ("%s:HTTP GET %s:%s%s"):format(SCRIPT_NAME, host.targetname or host.ip, port.number, uri))
+	local intresting_keys = {"java.runtime","java.version","java.vm.name","java.vm.vendor","java.vm.version","os","user.name","user.country","user.language,user.timezone"}
+	local uri = "/masterenv.jsp"
 	local response = http.get( host, port, uri )
 	stdnse.print_debug(1, ("%s: Status %s"):format(SCRIPT_NAME,response['status-line'] or "No Response" ))
 	if response['status-line'] and response['status-line']:match("200%s+OK") and response['body']  then
 		local body = response['body']:gsub("%%","%%%%")
-		stdnse.print_debug(2, ("%s: Body %s\n"):format(SCRIPT_NAME,body))
-		for datanodetmp in string.gmatch(body, "[%w%.:-_]+/browseDirectory.jsp") do
-			local datanode = datanodetmp:gsub("/browseDirectory.jsp","")
-			stdnse.print_debug(1, ("%s: Datanode %s"):format(SCRIPT_NAME,datanode))
-			table.insert(result, ("Datanode: %s"):format(datanode))
-			if target.ALLOW_NEW_TARGETS then
-				if datanode:match("([%w%.]+)") then
-					local newtarget = datanode:match("([%w%.]+)")
-					stdnse.print_debug(1, ("%s: Added target: %s"):format(SCRIPT_NAME, newtarget))
-					local status,err = target.add(newtarget)
+		for name,value in string.gmatch(body,"<tr><th>([^][<]+)</th><td><div%sclass=[^][>]+>([^][<]+)") do
+			stdnse.print_debug(1, ("%s:  %s=%s "):format(SCRIPT_NAME,name,value:gsub("^%s*(.-)%s*$", "%1")))
+			if nmap.verbosity() > 1 then
+				 result[#result+1] = ("%s: %s"):format(name,value:gsub("^%s*(.-)%s*$", "%1"))
+			else
+				for i,v in ipairs(intresting_keys) do
+					if name:match(("^%s"):format(v)) then
+						result[#result+1] = ("%s: %s"):format(name,value:gsub("^%s*(.-)%s*$", "%1"))
+					end
 				end
 			end
 		end
 	end
 	return result
 end
-
 action = function( host, port )
 
 	local result = {}
 	local uri = "/flumemaster.jsp"
+	local nodes = {  }
+	local zookeepers = {  }
+	local hbasemasters = {  }
 	stdnse.print_debug(1, ("%s:HTTP GET %s:%s%s"):format(SCRIPT_NAME, host.targetname or host.ip, port.number, uri))
 	local response = http.get( host, port, uri )
 	stdnse.print_debug(1, ("%s: Status %s"):format(SCRIPT_NAME,response['status-line'] or "No Response"))
@@ -85,18 +96,49 @@ action = function( host, port )
 		if body:match("Version:%s*</b>([^][,]+)") then
 			local version = body:match("Version:%s*</b>([^][,]+)")
 			stdnse.print_debug(1, ("%s: Version %s"):format(SCRIPT_NAME,version))
-			table.insert(result, ("Version: %s"):format(version))
+			result[#result+1] =  ("Version: %s"):format(version)
 			port.version.version = version
 		end
 		if body:match("Compiled:%s*</b>([^][<]+)") then
 			local compiled = body:match("Compiled:%s*</b>([^][<]+)")
 			stdnse.print_debug(1, ("%s: Compiled %s"):format(SCRIPT_NAME,compiled))
-			table.insert(result, ("Compiled: %s"):format(compiled))
+			result[#result+1] =  ("Compiled: %s"):format(compiled)
 		end
 		if body:match("ServerID:%s*([^][<]+)") then
 			local upgrades = body:match("ServerID:%s*([^][<]+)")
 			stdnse.print_debug(1, ("%s: ServerID %s"):format(SCRIPT_NAME,upgrades))
-			table.insert(result, ("ServerID: %s"):format(upgrades))
+			result[#result] = ("ServerID: %s"):format(upgrades)
 		end
+		table.insert(result, "Flume nodes:")
+		for logical,physical,hostname in string.gmatch(body,"<tr><td>([%w%.-_:]+)</td><td>([%w%.]+)</td><td>([%w%.]+)</td>") do
+			stdnse.print_debug(2, ("%s:  %s (%s) %s"):format(SCRIPT_NAME,physical,logical,hostname))
+			if (table_count(nodes, hostname) == 0) then
+				nodes[#nodes+1] = hostname
+			end
+		end
+		if next(nodes) ~= nil then 
+			result[#result+1] = nodes
+		end
+		result[#result+1] = "Zookeeper Master:"
+		for zookeeper in string.gmatch(body,"Dhbase.zookeeper.quorum=([^][\"]+)") do
+			if (table_count(zookeepers, zookeeper) == 0) then
+				zookeepers[#zookeepers+1] = zookeeper
+			end
+		end
+		if next(zookeepers) ~= nil then 
+			result[#result+1] = zookeepers
+		end
+		result[#result+1] = "Hbase Master Master:"
+		for hbasemaster in string.gmatch(body,"Dhbase.rootdir=([^][\"]+)") do
+			if (table_count(hbasemasters, hbasemaster) == 0) then
+				hbasemasters[#hbasemasters+1] = hbasemaster
+			end
+		end
+		if next(hbasemasters) ~= nil then 
+			result[#result+1] = hbasemasters
+		end
+		result[#result+1] = "Enviroment: "
+		result[#result+1] = getenv(host, port)
+		return stdnse.format_output(true, result)
 	end
 end
