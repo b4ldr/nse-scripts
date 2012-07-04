@@ -7,30 +7,77 @@ local table = require "table"
 local target = require "target"
 
 description = [[
+Retrieves information from an Flume master HTTP pages.
+
+Information gathered:
+ * flume version
+ * flume server id
+ * Zookeeper/Hbase master servers present in configured flows
+ * java informathin
+ * os information
+ * various other local config
+
+If this script is run wth -v it will out put lots more info.  to much to list here
+
+This script supports newtargets
 ]]
 
 ---
 -- @usage
--- nmap --script flume-master-info -p 50070 host
+-- nmap --script flume-master-info -p 35871 host
 --
 -- @output
 -- PORT      STATE SERVICE         REASON
--- 50070/tcp open  flume-master syn-ack
--- | flume-master-info:
--- |   Started:  Wed May 11 22:33:44 PDT 2011
--- |   Version:  0.20.2-cdh3u1, f415ef415ef415ef415ef415ef415ef415ef415e
--- |   Compiled:  Wed May 11 22:33:44 PDT 2011 by bob from unknown
--- |   Upgrades:  There are no upgrades in progress.
--- |   Filesystem: /nn_browsedfscontent.jsp
--- |   Logs: /logs/
--- |   Storage:
--- |   Total       Used (DFS)      Used (Non DFS)  Remaining
--- |   100 TB      85 TB           500 GB          14.5 TB
--- |   Datanodes (Live):
--- |     Datanode: datanode1.example.com:50075
--- |     Datanode: datanode2.example.com:50075
----
-
+-- 35871/tcp open  flume-master syn-ack
+--| flume-master-info: 
+--|   Version:  0.9.4-cdh3u3
+--|   ServerID: 0
+--|   Flume nodes:
+--|     node1.example.com
+--|     node2.example.com
+--|     node5.example.com
+--|     node6.example.com
+--|     node3.example.com
+--|     node4.example.com
+--|   Zookeeper Master:
+--|     master1.example.com
+--|   Hbase Master Master:
+--|     hdfs://master1.example.com:8020/hbase
+--|   Enviroment: 
+--|     java.runtime.name: Java(TM) SE Runtime Environment
+--|     java.runtime.version: 1.6.0_36-a01
+--|     java.version: 1.6.0_36
+--|     java.vm.name: Java HotSpot(TM) 64-Bit Server VM
+--|     java.vm.vendor: Sun Microsystems Inc.
+--|     java.vm.version: 14.0-b12
+--|     os.arch: amd64
+--|     os.name: Linux
+--|     os.version: 2.6.32-220.4.2.el6.x86_64
+--|     user.country: US
+--|     user.name: flume
+--|   Config: 
+--|     dfs.datanode.address: 0.0.0.0:50010
+--|     dfs.datanode.http.address: 0.0.0.0:50075
+--|     dfs.datanode.https.address: 0.0.0.0:50475
+--|     dfs.datanode.ipc.address: 0.0.0.0:50020
+--|     dfs.http.address: master1.example.com:50070
+--|     dfs.https.address: 0.0.0.0:50470
+--|     dfs.secondary.http.address: 0.0.0.0:50090
+--|     flume.collector.dfs.dir: hdfs://master1.example.com/user/flume/collected
+--|     flume.collector.event.host: node1.example.com
+--|     flume.master.servers: master1.example.com
+--|     fs.default.name: hdfs://master1.example.com:8020
+--|     mapred.job.tracker: master1.example.com:9001
+--|     mapred.job.tracker.handler.count: 10
+--|     mapred.job.tracker.http.address: 0.0.0.0:50030
+--|     mapred.job.tracker.http.address: 0.0.0.0:50030
+--|     mapred.job.tracker.jobhistory.lru.cache.size: 5
+--|     mapred.job.tracker.persist.jobstatus.active: false
+--|     mapred.job.tracker.persist.jobstatus.dir: /jobtracker/jobsInfo
+--|     mapred.job.tracker.persist.jobstatus.hours: 0
+--|     mapred.job.tracker.retiredjobs.cache.size: 1000
+--|     mapred.task.tracker.http.address: 0.0.0.0:50060
+--|_    mapred.task.tracker.report.address: 127.0.0.1:0
 
 author = "John R. Bond (john.r.bond@gmail.com)"
 license = "Simplified (2-clause) BSD license--See http://nmap.org/svn/docs/licenses/BSD-simplified"
@@ -44,6 +91,13 @@ portrule = function(host, port)
 		or (shortport.service(shortport.LIKELY_HTTP_SERVICES)(host, port) and not shortport.portnumber(shortport.LIKELY_HTTP_PORTS)(host, port))
 end
 
+function add_target(hostname) 
+	if target.ALLOW_NEW_TARGETS then
+		stdnse.print_debug(1, ("%s: Added target: %s"):format(SCRIPT_NAME, hostname))
+		local status,err = target.add(hostname)
+	end
+end
+
 -- ref: http://lua-users.org/wiki/TableUtils
 function table_count(tt, item)
 	local count
@@ -54,15 +108,14 @@ function table_count(tt, item)
 	return count
 end
 
-getenv = function( host, port )
+parse_page = function( host, port, uri, intresting_keys )
 	local result = {}
-	local intresting_keys = {"java.runtime","java.version","java.vm.name","java.vm.vendor","java.vm.version","os","user.name","user.country","user.language,user.timezone"}
-	local uri = "/masterenv.jsp"
 	local response = http.get( host, port, uri )
 	stdnse.print_debug(1, ("%s: Status %s"):format(SCRIPT_NAME,response['status-line'] or "No Response" ))
 	if response['status-line'] and response['status-line']:match("200%s+OK") and response['body']  then
 		local body = response['body']:gsub("%%","%%%%")
-		for name,value in string.gmatch(body,"<tr><th>([^][<]+)</th><td><div%sclass=[^][>]+>([^][<]+)") do
+		stdnse.print_debug("HEREHEREHERE")
+		for name,value in string.gmatch(body,"<tr><th>([^][<]+)</th>%s*<td><div%sclass=[^][>]+>([^][<]+)") do
 			stdnse.print_debug(1, ("%s:  %s=%s "):format(SCRIPT_NAME,name,value:gsub("^%s*(.-)%s*$", "%1")))
 			if nmap.verbosity() > 1 then
 				 result[#result+1] = ("%s: %s"):format(name,value:gsub("^%s*(.-)%s*$", "%1"))
@@ -77,10 +130,15 @@ getenv = function( host, port )
 	end
 	return result
 end
+
 action = function( host, port )
 
 	local result = {}
 	local uri = "/flumemaster.jsp"
+	local env_uri = "/masterenv.jsp"
+	local config_uri = "/masterstaticconfig.jsp"
+	local env_keys = {"java.runtime","java.version","java.vm.name","java.vm.vendor","java.vm.version","os","user.name","user.country","user.language,user.timezone"}
+	local config_keys = {"dfs.datanode.address","dfs.datanode.http.address","dfs.datanode.https.address","dfs.datanode.ipc.address","dfs.http.address","dfs.https.address","dfs.secondary.http.address","flume.collector.dfs.dir","flume.collector.event.host","flume.master.servers","fs.default.name","mapred.job.tracker","mapred.job.tracker.http.address","mapred.task.tracker.http.address","mapred.task.tracker.report.address"}
 	local nodes = {  }
 	local zookeepers = {  }
 	local hbasemasters = {  }
@@ -114,6 +172,7 @@ action = function( host, port )
 			stdnse.print_debug(2, ("%s:  %s (%s) %s"):format(SCRIPT_NAME,physical,logical,hostname))
 			if (table_count(nodes, hostname) == 0) then
 				nodes[#nodes+1] = hostname
+				add_target(hostname)
 			end
 		end
 		if next(nodes) ~= nil then 
@@ -123,6 +182,7 @@ action = function( host, port )
 		for zookeeper in string.gmatch(body,"Dhbase.zookeeper.quorum=([^][\"]+)") do
 			if (table_count(zookeepers, zookeeper) == 0) then
 				zookeepers[#zookeepers+1] = zookeeper
+				add_target(zookeeper)
 			end
 		end
 		if next(zookeepers) ~= nil then 
@@ -132,13 +192,16 @@ action = function( host, port )
 		for hbasemaster in string.gmatch(body,"Dhbase.rootdir=([^][\"]+)") do
 			if (table_count(hbasemasters, hbasemaster) == 0) then
 				hbasemasters[#hbasemasters+1] = hbasemaster
+				add_target(hbasemaster)
 			end
 		end
 		if next(hbasemasters) ~= nil then 
 			result[#result+1] = hbasemasters
 		end
 		result[#result+1] = "Enviroment: "
-		result[#result+1] = getenv(host, port)
+		result[#result+1] = parse_page(host, port, env_uri, env_keys )
+		result[#result+1] = "Config: "
+		result[#result+1] = parse_page(host, port, config_uri, config_keys )
 		return stdnse.format_output(true, result)
 	end
 end
