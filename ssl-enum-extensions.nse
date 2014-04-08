@@ -1,5 +1,3 @@
-local coroutine = require "coroutine"
-local io = require "io"
 local nmap = require "nmap"
 local shortport = require "shortport"
 local stdnse = require "stdnse"
@@ -19,16 +17,20 @@ This script preforms an TLS1.0 connection to an end point setting all extensions
 -- PORT    STATE SERVICE REASON
 -- 443/tcp open  https   syn-ack
 -- | ssl-enum-extension:
+-- |   ec_point_formats
+-- |   heartbeat
+-- |   renegotiation_info
+-- |_  server_name
 --
 -- @xmloutput
--- <table key="SSLv3">
---   <table key="ciphers">
---     <table>
---     </table>
+-- <elem>ec_point_formats</elem>
+-- <elem>heartbeat</elem>
+-- <elem>renegotiation_info</elem>
+-- <elem>server_name</elem>
 
 author = "John Bond <mail@johnbond.org>"
 
-license = "BSD Simplified 2 clause--See http://nmap.org/book/man-legal.html"
+license = "Simplified (2-clause) BSD license--See http://nmap.org/svn/docs/licenses/BSD-simplified"
 
 categories = {"discovery", "intrusive"}
 
