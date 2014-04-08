@@ -34,7 +34,7 @@ license = "Simplified (2-clause) BSD license--See http://nmap.org/svn/docs/licen
 
 categories = {"discovery", "intrusive"}
 
-
+-- Function lifted from ssl-enum-ciphers
 local function try_params(host, port, t)
   local buffer, err, i, record, req, resp, sock, status
 
