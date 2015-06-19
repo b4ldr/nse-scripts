@@ -38,7 +38,7 @@ that form addresses in a given subnet.
 --  Most code is copy pasted from http://nmap.org/nsedoc/scripts/targets-ipv6-wordlist.html
 --  Further work would be to migrate core functions to a libary 
 --  Idea for additions from https://github.com/dragonresearchgroup/pfuzz
---  Created 19/06/2015 - v1.0 Created by John Bond <nmap@johnbond.org.>
+--  Created 19/06/2015 - v1.0 Created by John Bond <nmap-dev@johnbond.org.>
 --
 
 author = "John Bond"
@@ -195,12 +195,12 @@ local Prescanning = function ()
   end
   for mac, _vendor in pairs(maclist) do
     if _vendor == vendor then
-      stdnse.debug1("add mac address %s", mac)
+      stdnse.debug1("add mac prefix %s", mac)
       for _, x in ipairs(hextuple) do
         for _, y in ipairs(hextuple) do
           for _, z in ipairs(hextuple) do
             addr = mac .. 'FFFE' .. x .. y .. z
-            stdnse.verbose2("add mac address %s", addr)
+            stdnse.verbose2("add slacc address %s", addr)
             table.insert(list, addr)
           end
         end

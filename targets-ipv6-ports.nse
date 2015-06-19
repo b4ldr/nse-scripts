@@ -28,7 +28,7 @@ Adds IPv6 addresses to the scan queue using common ports to detect common servic
 --  Most code is copy pasted from http://nmap.org/nsedoc/scripts/targets-ipv6-wordlist.html
 --  Further work would be to migrate core functions to a libary 
 --  Idea for additions from https://github.com/dragonresearchgroup/pfuzz
---  Created 19/06/2015 - v1.0 Created by John Bond <nmap@johnbond.org.>
+--  Created 19/06/2015 - v1.0 Created by John Bond <nmap-dev@johnbond.org.>
 --
 author = "John Bond"
 license = "Simplified (2-clause) BSD license--See http://nmap.org/svn/docs/licenses/BSD-simplified"
