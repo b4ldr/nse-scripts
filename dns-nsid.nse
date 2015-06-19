@@ -26,9 +26,9 @@ license = "Simplified (2-clause) BSD license--See http://nmap.org/svn/docs/licen
 
 categories = {"discovery", "default"}
 
-require "stdnse"
-require "shortport"
-require "dns"
+local shortport = require "stdnse"
+local shortport = require "shortport"
+local shortport = require "dns"
 
 portrule = shortport.port_or_service(53, "domain", {"tcp", "udp"})
 
