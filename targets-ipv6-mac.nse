@@ -35,6 +35,9 @@ that form addresses in a given subnet.
 -- @args targets-ipv6-subnet  table/single IPv6
 --                         address with prefix (Ex. 2001:db8:c0ca::/48 or
 --                         { 2001:db8:c0ca::/48, 2001:db8:FEA::/48 } )
+--  Most code is copy pasted from http://nmap.org/nsedoc/scripts/targets-ipv6-wordlist.html
+--  Further work would be to migrate core functions to a libary 
+--  Idea for additions from https://github.com/dragonresearchgroup/pfuzz
 --  Created 19/06/2015 - v1.0 Created by John Bond <nmap@johnbond.org.>
 --
 

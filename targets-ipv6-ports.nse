@@ -25,6 +25,9 @@ Adds IPv6 addresses to the scan queue using common ports to detect common servic
 --                         { 2001:db8:c0ca::/48, 2001:db8:FEA::/48 } )
 -- @args targets-ipv6-ports.ports  table of ports
 --                         {21,22,23,25,80,135,139,443,445,666,999,3306,3389,4567}
+--  Most code is copy pasted from http://nmap.org/nsedoc/scripts/targets-ipv6-wordlist.html
+--  Further work would be to migrate core functions to a libary 
+--  Idea for additions from https://github.com/dragonresearchgroup/pfuzz
 --  Created 19/06/2015 - v1.0 Created by John Bond <nmap@johnbond.org.>
 --
 author = "John Bond"
