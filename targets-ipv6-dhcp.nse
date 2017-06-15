@@ -8,7 +8,7 @@ local table = require "table"
 local math = require "math"
 
 description = [[
-Adds IPv6 addresses to the scan queue using common ports to detect common service addresses
+Adds IPv6 addresses to the scan common DHCP address pool ranges
 ]]
 
 ---

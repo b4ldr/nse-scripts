@@ -9,8 +9,7 @@ local math = require "math"
 local io = require "io"
 
 description = [[
-Adds IPv6 addresses to the scan queue using a wordlist of hexadecimal "words"
-that form addresses in a given subnet.
+Generates IPv6 SLAAC addresses to add to the scan queue based on a given MAC OUI
 ]]
 
 ---
