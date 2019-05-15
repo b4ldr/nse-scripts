@@ -40,11 +40,11 @@ license = "Simplified (2-clause) BSD license--See http://nmap.org/svn/docs/licen
 
 categories = {"discovery", "default"}
 
-require "stdnse"
-require "shortport"
-require "json"
-require "http"
-require "target"
+local stdnse = require "stdnse"
+local shortport = require "shortport"
+local json = require "json"
+local http = require "http"
+local target = require "target"
 
 local httphost = "stat.ripe.net"
 local apiuri = "/plugin/"
@@ -56,8 +56,9 @@ end
 
 getJson = function(plugin, resource)
 	local url = apiuri .. plugin .. format .. "?resource=" .. resource
-	local response = http.get(httphost, "80", url)
+	local response = http.get(httphost, 443, url)
 	if ( 200 ~= response.status ) then
+	    stdnse.debug(1,"FAIL HTTP: %s", response.status)
 		return false
 	end
 	local status, parsed = json.parse(response.body)
@@ -83,7 +84,7 @@ getGeolocHistory = function(prefix)
 				results[key] =  results[key] .. "," .. i.month
 				
 			end
-			stdnse.print_debug(2,"%s: %s",key,  results[key])
+			stdnse.debug(2,"%s: %s",key,  results[key])
 		end
 	end
 	return results
@@ -106,18 +107,18 @@ getReverseDNS = function(prefix)
 			entry.description = ""
 			entry.nserver = {}
 			for _, attr in  ipairs(delegation) do
-				stdnse.print_debug(4,"name/value: %s/%s", attr.key,attr.value)
+				stdnse.debug(4,"name/value: %s/%s", attr.key,attr.value)
 				if attr.key == "domain" then
 					entry.domain = attr.value
-					stdnse.print_debug(3,"domain: %s", entry.domain)
+					stdnse.debug(3,"domain: %s", entry.domain)
 				elseif attr.key == "descr" then
 					entry.description = attr.value
-					stdnse.print_debug(3,"description: %s", entry.description)
+					stdnse.debug(3,"description: %s", entry.description)
 				elseif attr.key == "nserver" then
 					table.insert(entry.nserver,attr.value)
-					stdnse.print_debug(3,"name server: %s", attr.value)
+					stdnse.debug(3,"name server: %s", attr.value)
 					if target.ALLOW_NEW_TARGETS then
-						stdnse.print_debug("Added targets: "..attr.value)
+						stdnse.debug("Added targets: "..attr.value)
 						local status,err = target.add(attr.value)
 					end
 				end
@@ -137,7 +138,7 @@ getAnnouncedPrefixes = function(asn)
 	end
 	for _,prefix in ipairs(parsed.data.prefixes) do
 		table.insert(prefixes,prefix.prefix)
-		stdnse.print_debug(1,"Prefix: %s", prefix.prefix)
+		stdnse.debug(1,"Prefix: %s", prefix.prefix)
 		nmap.registry.ripestat_prefixs[prefix.prefix] = asn 
 	end
 	return prefixes
@@ -149,17 +150,17 @@ getAsnNeighbours = function(asn)
 	if not(parsed) then
 		return parsed
 	end
-	stdnse.print_debug(2,"Count L/R: %s/%s",parsed.data.neighbour_counts.left,parsed.data.neighbour_counts.right)
+	stdnse.debug(2,"Count L/R: %s/%s",parsed.data.neighbour_counts.left,parsed.data.neighbour_counts.right)
 	for _,neighbour in ipairs(parsed.data.neighbours) do
-		stdnse.print_debug(2,"AS: %s (%s)",neighbour.asn, neighbour.type)
+		stdnse.debug(2,"AS: %s (%s)",neighbour.asn, neighbour.type)
 		if neighbour.type == "left" then
 			table.insert(left,neighbour.asn)
 		elseif neighbour.type == "right" then
 			table.insert(right,neighbour.asn)
 		end
 	end
-	stdnse.print_debug(1,"Neighbour Left: %s",table.concat(left,","))
-	stdnse.print_debug(1,"Neighbour Right: %s",table.concat(right,","))
+	stdnse.debug(1,"Neighbour Left: %s",table.concat(left,","))
+	stdnse.debug(1,"Neighbour Right: %s",table.concat(right,","))
 	return left,right
 end
 
@@ -168,7 +169,7 @@ getAsOverview = function(asn)
 	if not(parsed) then
 		return parsed
 	end
-	stdnse.print_debug(1,"Owner: %s",parsed.data.holder)
+	stdnse.debug(1,"Owner: %s",parsed.data.holder)
 	return parsed.data.holder
 end
 
@@ -177,9 +178,9 @@ getNetworkInfo = function(ip)
 	if not(parsed) then
 		return parsed
 	end
-	stdnse.print_debug(1,"ASN: %s",parsed.data.asn)
-	stdnse.print_debug(1,"Prefix: %s",parsed.data.prefix)
-	return parsed.data.asn, parsed.data.prefix
+	stdnse.debug(1,"ASNS: %s",table.concat(parsed.data.asns,(',')))
+	stdnse.debug(1,"Prefix: %s",parsed.data.prefix)
+	return parsed.data.asns, parsed.data.prefix
 end
 
 getPrefixOverview = function(prefix)
@@ -187,8 +188,8 @@ getPrefixOverview = function(prefix)
 	if not(parsed) then
 		return parsed
 	end
-	stdnse.print_debug(2, "Block: %s", parsed.data.block.resources)
-	stdnse.print_debug(2, "owner: %s", parsed.data.block.name)
+	stdnse.debug(2, "Block: %s", parsed.data.block.resources)
+	stdnse.debug(2, "owner: %s", parsed.data.block.name)
 	return parsed.data.block.resources, parsed.data.block.name
 end
 quadToInt = function (ip)
@@ -215,35 +216,40 @@ action = function(host, port)
 		verbose = false 
 	end
 
-	info.prefixes, info.leftNeighbours, info.rightNeighbours  = {}, {}, {}
+	info.asns, info.prefixes, info.leftNeighbours, info.rightNeighbours  = {}, {}, {}, {}
+    info.prefix = {}
 	nmap.registry.ripestat_asns, nmap.registry.ripestat_prefixs = {}, {}
 	if #nmap.registry.ripestat_prefixs > 0 then
 		for _,prefix in ipairs(nmap.registry.ripestat_prefixs) do
 			if ipInPrefix(host.ip,prefix) then
-				info.asn = nmap.registry.ripestat_prefixs[prefix]
+				info.asns = nmap.registry.ripestat_prefixs[prefix]
 			end 
 		end
 	else
-		info.asn, info.prefix = getNetworkInfo(host.ip)
-		nmap.registry.ripestat_prefixs[info.prefix] = info.asn
-		for prefix,asn in pairs(nmap.registry.ripestat_prefixs) do
-			stdnse.print_debug("HERE: " .. prefix .. " : " .. asn)
+		info.asns, info.prefix = getNetworkInfo(host.ip)
+		nmap.registry.ripestat_prefixs[info.prefix] = info.asns
+		for prefix,asns in pairs(nmap.registry.ripestat_prefixs) do
+			stdnse.debug("HERE: " .. prefix .. " : " .. table.concat(asns, ','))
 		end
 	end
-	if nmap.registry.ripestat_asns[info.asn] then
-		return "ASN (" .. info.asn .. ") Already scanned" 
-	else
-		nmap.registry.ripestat_asns[info.asn] = true
-	end
+    for _, asn in ipairs(info.asns) do
+      if nmap.registry.ripestat_asns[asn] then
+          return "ASN (" .. asn .. ") Already scanned" 
+      else
+          nmap.registry.ripestat_asns[asn] = true
+      end
+    end
 
-	info.owner = getAsOverview(info.asn)
-	info.leftNeighbours.list, info.rightNeighbours.list = getAsnNeighbours(info.asn)
-	local prefixes_tmp = getAnnouncedPrefixes(info.asn)
+    -- seriously lua arrays start at 1 wtf!
+    -- # TODO: support multiple ASN's better
+	info.owner = getAsOverview(info.asns[1])
+	info.leftNeighbours.list, info.rightNeighbours.list = getAsnNeighbours(info.asns[1])
+	local prefixes_tmp = getAnnouncedPrefixes(info.asns[1])
 
 	table.sort(info.leftNeighbours.list)
 	table.sort(info.rightNeighbours.list)
 
-	table.insert(result,"ASN: " .. info.asn .. "(" .. info.owner .. ")")
+	table.insert(result,"ASN: " .. info.asns[1] .. "(" .. info.owner .. ")")
 	if #info.leftNeighbours.list > 0 then
 		if verbose then
 			info.leftNeighbours.owner = {}
@@ -286,16 +292,16 @@ action = function(host, port)
 	for _, pre in ipairs(info.prefixes) do
 		table.insert(result, "Prefix: " .. pre)
 		if target.ALLOW_NEW_TARGETS then
-			stdnse.print_debug("Added targets: "..pre)
+			stdnse.debug("Added targets: "..pre)
 			local status,err = target.add(pre)
 		end
 		if verbose then
 			info.prefixes[pre] = {}
-			stdnse.print_debug(1,"Working with: %s", pre)
+			stdnse.debug(1,"Working with: %s", pre)
 			info.prefixes[pre].block, info.prefixes[pre].name = getPrefixOverview(pre)
-			stdnse.print_debug("%s : %s",  info.prefixes[pre].block,  info.prefixes[pre].name )
+			stdnse.debug("%s : %s",  info.prefixes[pre].block,  info.prefixes[pre].name )
 --			if not (info.block[info.prefixes[pre].block]) then
---		stdnse.print_debug("HRHRHRHRHR")
+--		stdnse.debug("HRHRHRHRHR")
 --			 	info.block[info.prefixes[pre].block] = {}
 --			 	info.block[info.prefixes[pre].block].name = info.prefixes[pre].name 
 --			 	info.block[info.prefixes[pre].block].prefixes = {} 
@@ -320,7 +326,7 @@ action = function(host, port)
 			end
 		end
 	end
---	stdnse.print_debug("%s",#info.block)
+--	stdnse.debug("%s",#info.block)
 --	for block in pairs(info.block) do
 --		table.insert(result,{"Block: " .. block.prefixes .. " (" .. block.name .. ")"})
 --		if block.location then
