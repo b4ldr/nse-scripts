@@ -188,9 +188,9 @@ getPrefixOverview = function(prefix)
 	if not(parsed) then
 		return parsed
 	end
-	stdnse.debug(2, "Block: %s", parsed.data.block.resources)
+	stdnse.debug(2, "Block: %s", parsed.data.block.resource)
 	stdnse.debug(2, "owner: %s", parsed.data.block.name)
-	return parsed.data.block.resources, parsed.data.block.name
+	return parsed.data.block.resource, parsed.data.block.name
 end
 quadToInt = function (ip)
         local addr = stdnse.strsplit("%.",ip)
